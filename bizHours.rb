@@ -1,22 +1,29 @@
 #####################################################
 #    												#
-#  A routine that returns a Time object after after	#
+#  A routine that returns a Time object after       #
 #  predefined elapsed duration respecting business 	#
-#  hours, daily special hours and holidays.			#
+#  hours, special daily hours and holidays.			#
 # 													#
 #####################################################
+require 'time'
 
 class BusinessHours
 	attr_reader	:openDayHash
 	def initialize(dailyStart,dailyEnd)
 		@days 				= [:mon,:tue,:wed,:thu,:fri,:sat,:sun]
+		@wdays    			= {0 => :sun, 1 => :mon, 2 => :tue, 3 => :wed, 4 => :thu, 5 => :fri, 6 => :sat, }
 		@openDayHash 		= {}
 		@openSpecialHash 	= {}
 		@closedDayHash	 	= {}
 		@closedSpecialHash 	= {}
 
 		@days.each {|day| @openDayHash[day] = [day , dailyStart , dailyEnd]}
-		p @openDayHash
+	end
+
+	def correct_am_pm(value)
+		splt = value.split(" ")
+		splt2 = splt[0].split(":")
+		return "#{splt2[0].to_i + (splt[1]=="PM" ? 12:0)}:#{splt2[1]}"
 	end
 
 	def update(day,t_start, t_end)
@@ -59,43 +66,49 @@ class BusinessHours
 	end
 
 	def calculate_deadline(date, duration = 7200)
-		@startTime  = Time.new(date)
+		@startTime  = Time.parse(date)
 		@duration   = duration
 		@secsToGo	= duration
 
-		timecount = 0
-		while @secsToGo > 0
-			@secsToGo -= evaluate(timecount)
-			timecount += 1
+		timecount   = 0
+
+		#increment by multiples of 1 second
+		speedUp		= 60
+
+		while @secsToGo >= 0
+			@secsToGo -= (speedUp * evaluate(timecount))
+			if timecount%600 == 0
+				puts "Elapsed: #{timecount}\ttoGo: #{@secsToGo}\t#{@startTime+timecount}"
+			end
+			timecount += speedUp
 		end
-		puts "Your stuff will be ready on #{@startTime + timeCount}."
+		puts "\nYour stuff will be ready on #{@startTime + timecount}."
 	end
 
 	def evaluate(timeCount)
 		currTime = @startTime + timeCount
-		wday = currTime.wday
+		wday 	 = currTime.wday
 		timeOK   = false
 		checkOK	 = false
-		wdays    = {0 => :sun, 1 => :mon, 2 => :tue, 3 => :wed, 4 => :thu, 5 => :fri, 6 => :sat, }
-		openThisDay = @openDayHash[wdays[wday]]
-		t1 = getDateTime(currTime.year, currTime.month, currTime.day, openThisDay[1])
-		t2 = getDateTime(currTime.year, currTime.month, currTime.day, openThisDay[2])
-		if @openDayHash[wday]
+		openThisDay = @openDayHash[@wdays[wday]]
+		t1 = getDateTime(currTime.year, currTime.month, currTime.day, correct_am_pm(openThisDay[1]))
+		t2 = getDateTime(currTime.year, currTime.month, currTime.day, correct_am_pm(openThisDay[2]))
+		if @openDayHash[@wdays[wday]]
 			if currTime.between?(t1,t2)
 				checkOK = true
 			end
 		end
 		openSpecial = @openSpecialHash[getDate(currTime)]
-		if openSpecial #!!!!render properly
+		if openSpecial 
 			checkOK = false
-	 		t1 = getDateTime(currTime.year, currTime.month, currTime.day, openSpecial[1])
-			t2 = getDateTime(currTime.year, currTime.month, currTime.day, openSpecial[2])
+	 		t1 = getDateTime(currTime.year, currTime.month, currTime.day, correct_am_pm(openSpecial[1]))
+			t2 = getDateTime(currTime.year, currTime.month, currTime.day, correct_am_pm(openSpecial[2]))
 			if currTime.between?(t1,t2)
 				checkOK = true
 			end
 		end
 
-		if closedDayHash[wday[wday]]
+		if @closedDayHash[wday[wday]]
 			checkOK = false
 		end
 
@@ -124,4 +137,6 @@ hours.update("Dec 24, 2010", "8:00 AM", "1:00 PM")
 hours.closed(:sun, :wed, "Dec 25, 2010")
 
 
-
+#hours.calculate_deadline("Jun 7, 2010 9:10 AM") # => Mon Jun 07 11:10:00 2010
+hours.calculate_deadline("Jun 8, 2010 2:48 PM") # => Thu Jun 10 09:03:00 2010
+#hours.calculate_deadline("Dec 24, 2010 6:45 AM") # => Mon Dec 27 11:00:00 2010
